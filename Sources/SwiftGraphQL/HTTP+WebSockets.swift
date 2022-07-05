@@ -76,14 +76,14 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
 //                   log: OSLog.subscription,
 //                   type: .debug,
 //                   (String(data: messageData, encoding: .utf8) ?? "Invalid .utf8")
-            )
+//            )
             state = .started
             socket = S.create(with: initParams, errorHandler: errorHandler)
             socket?.send(message: messageData, errorHandler: { [weak self] in
                 self?.stop()
                 errorHandler(.startError(.connectionInit(error: $0)))
             })
-            socket?.receiveMessages { [weak self] (message) in
+            socket?.receiveMessages { [weak self] (message) -> Bool in
                 switch message {
                 case .success(let data):
 //                    os_log("Received Data: %{public}@",
