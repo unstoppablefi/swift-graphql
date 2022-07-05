@@ -225,6 +225,10 @@ public extension Schema {
     /// Downloads a schema from the provided endpoint.
     init(from endpoint: URL, withHeaders headers: [String: String] = [:]) throws {
         let introspection: Data = try fetch(from: endpoint, withHeaders: headers)
+        try self.init(introspection: introspection)
+    }
+    
+    init(introspection: Data) throws {
         self = try parse(introspection)
     }
 }

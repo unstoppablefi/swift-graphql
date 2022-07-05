@@ -28,6 +28,13 @@ public struct GraphQLCodegen {
         let code = try generate(schema: schema)
         return code
     }
+    
+    public func generateFromStdin() throws -> String {
+        let introspection: Data = try FileHandle.standardInput.readToEnd()!
+        let schema = try Schema(introspection: introspection)
+        let code = try generate(schema: schema)
+        return code
+    }
 
     /// Generates the code that can be used to define selections.
     func generate(schema: Schema) throws -> String {
