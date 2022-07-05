@@ -12,7 +12,7 @@ struct SwiftGraphQLCLI: ParsableCommand {
     // MARK: - Parameters
 
     @Argument(help: "GraphQL server endpoint.")
-    var endpoint: String
+    var endpoint: String?
 
     @Option(help: "Relative path from CWD to your YML config file.")
     var config: String?
@@ -32,11 +32,6 @@ struct SwiftGraphQLCLI: ParsableCommand {
     // MARK: - Main
 
     func run() throws {
-        // Make sure we get a valid endpoint to fetch.
-        guard let url = URL(string: endpoint) else {
-            SwiftGraphQLCLI.exit(withError: SwiftGraphQLGeneratorError.endpoint)
-        }
-
         // Load configuration if config path is present, otherwise use default.
         let config: Config
 
@@ -47,24 +42,29 @@ struct SwiftGraphQLCLI: ParsableCommand {
             config = Config()
         }
         
-        var headers: [String: String] = [:]
-        
-        if let authorization = authorization {
-            headers["Authorization"] = authorization
-        }
-
-        // Generate the code.
         let generator = GraphQLCodegen(scalars: config.scalars)
-        let code = try generator.generate(from: url, withHeaders: headers)
 
-        // Write to target file or stdout.
+        let code: String
+        if let url = endpoint {
+            guard let url = URL(string: url) else {
+                SwiftGraphQLCLI.exit(withError: SwiftGraphQLGeneratorError.endpoint)
+            }
+            var headers: [String: String] = [:]
+            
+            if let authorization = authorization {
+                headers["Authorization"] = authorization
+            }
+            
+            code = try generator.generate(from: url, withHeaders: headers)
+        } else {
+            code = try generator.generateFromStdin()
+        }
+        
         if let outputPath = output {
             try Folder.current.createFile(at: outputPath).write(code)
         } else {
             FileHandle.standardOutput.write(code.data(using: .utf8)!)
         }
-
-        // The end
     }
 }
 
