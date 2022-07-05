@@ -57,7 +57,7 @@ final class ParserTests: XCTestCase {
         XCTAssertEqual(result.errors, [
             GraphQLError(
                 message: "Message.",
-                locations: [GraphQLError.Location(line: 6, column: 7)]
+                locations: [GraphQLError.Location(line: 6, column: 7)], extensions: [:]
             ),
         ])
     }
