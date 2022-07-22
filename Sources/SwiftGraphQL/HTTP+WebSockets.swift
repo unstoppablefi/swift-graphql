@@ -140,10 +140,17 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
         errorHandler: @escaping (Error) -> Void
     ) {
         if state == .notRunning {
+            // In this case we probably came back from the background, try to connect again
+            start(connectionParams: lastConnectionParams, errorHandler: errorHandler)
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.detachedPingQueue(interval: interval, errorHandler: errorHandler)
+            }
             return
         }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + interval) { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                return
+            }
             do {
                 let message = Message.ping()
                 let messageData = try self.encoder.encode(message)
