@@ -80,7 +80,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
             state = .started
             socket = S.create(with: initParams, errorHandler: errorHandler)
             socket?.send(message: messageData, errorHandler: { [weak self] in
-                self?.stop()
+                self?.restart(errorHandler: errorHandler)
                 errorHandler(.startError(.connectionInit(error: $0)))
             })
             socket?.receiveMessages { [weak self] (message) -> Bool in
@@ -105,12 +105,11 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                         }
                     case .ka:
                         self?.state = .running
-                    case .next, .error, .complete, .connection_error, .data:
+                    case .next, .error, .complete, .data:
                         guard let id = message.id else { return false }
                         self?.subscriptions[id]?(message)
-                    case .connection_terminate:
-                        self?.stop()
-                        return true
+                    case .connection_terminate, .connection_error:
+                        self?.restart(errorHandler: errorHandler)
                     case .pong:
                         self?.state = .running
                     case .subscribe, .connection_init, .ping:
@@ -126,7 +125,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                     
                     self?.stop()
                     errorHandler(.startError(.connectionInit(error: failure)))
-                    return true
+                    self?.restart(errorHandler: errorHandler)
                 }
                 return false
             }
@@ -140,11 +139,8 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
         errorHandler: @escaping (Error) -> Void
     ) {
         if state == .notRunning {
-            // In this case we probably came back from the background, try to connect again
-            start(connectionParams: lastConnectionParams, errorHandler: errorHandler)
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                self?.detachedPingQueue(interval: interval, errorHandler: errorHandler)
-            }
+            // Try again while we're restarting
+            self.detachedPingQueue(interval: interval, errorHandler: errorHandler)
             return
         }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + interval) { [weak self] in
@@ -261,6 +257,15 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     public func stop() {
         state = .notRunning
         socket = nil
+    }
+    
+    /// try to restart the socket after a brief delay
+    public func restart(errorHandler: @escaping (SubscribeError) -> Void) {
+        self.state = .notRunning
+        let params = lastConnectionParams
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            self?.start(connectionParams: params, errorHandler: errorHandler)
+        }
     }
     
     private func complete(id: String) {
