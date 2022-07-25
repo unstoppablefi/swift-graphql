@@ -22,6 +22,10 @@ public protocol GraphQLEnabledSocket {
     func receiveMessages(_ handler: @escaping (Result<Data, Error>) -> Bool)
 }
 
+final class SinglePingQueueToken {
+    var cancelled = false
+}
+
 /// https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md
 public class GraphQLSocket<S: GraphQLEnabledSocket> {
     
@@ -47,6 +51,9 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     
     // Every successful ping should be matched by a successful pong
     private var pingPongMatches: Int = 0
+    
+    // we should never have more than one ping queue token
+    var pingQueueToken: SinglePingQueueToken?
     
     public init(_ params: S.InitParamaters, autoConnect: Bool = false, pingInterval: TimeInterval? = nil) {
         self.initParams = params
@@ -102,6 +109,10 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                         self?.state = .running
                         // If we have a time interval, set up a ping thread
                         if let pingInterval = self?.pingInterval {
+                            // cancel the old token
+                            self?.pingQueueToken?.cancelled = true
+                            let token = SinglePingQueueToken()
+                            self?.pingQueueToken = token
                             self?.detachedPingQueue(interval: pingInterval, errorHandler: { error in
                                 errorHandler(.pingFailed(error))
                             }, pingHandler: { [weak self] in
@@ -112,7 +123,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                                     self.pingPongMatches = 0
                                     self.restart(errorHandler: errorHandler)
                                 }
-                            })
+                            }, token: token)
                         }
                     case .ka:
                         self?.state = .running
@@ -121,6 +132,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                         self?.subscriptions[id]?(message)
                     case .connection_terminate, .connection_error:
                         self?.restart(errorHandler: errorHandler)
+                        return true
                     case .pong:
                         self?.pingPongMatches -= 1
                         self?.state = .running
@@ -134,10 +146,9 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                     // Should we send this error to the start errorHandler?
                     // This could happen during the entire lifetime of the socket so
                     // it's not really a start error
-                    
-                    self?.stop()
-                    errorHandler(.startError(.connectionInit(error: failure)))
+                    //errorHandler(.startError(.connectionInit(error: failure)))
                     self?.restart(errorHandler: errorHandler)
+                    return true
                 }
                 return false
             }
@@ -149,12 +160,17 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     private func detachedPingQueue(
         interval: TimeInterval,
         errorHandler: @escaping (Error) -> Void,
-        pingHandler: @escaping () -> Void
+        pingHandler: @escaping () -> Void,
+        token: SinglePingQueueToken
     ) {
+        // if there is a new token, leave here, so there's always only one ping queue
+        guard !token.cancelled else {
+            return
+        }
         if state == .notRunning {
             // Try again while we're restarting
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3.0) { [weak self] in
-                self?.detachedPingQueue(interval: interval, errorHandler: errorHandler, pingHandler: pingHandler)
+                self?.detachedPingQueue(interval: interval, errorHandler: errorHandler, pingHandler: pingHandler, token: token)
             }
             return
         }
@@ -167,11 +183,16 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                 let messageData = try self.encoder.encode(message)
                 self.socket?.send(message: messageData, errorHandler: errorHandler)
                 pingHandler()
+                os_log(
+                    "Ping",
+                    log: OSLog.subscription,
+                    type: .debug
+                )
             } catch let error {
                 errorHandler(error)
             }
             // Schedule the next
-            self.detachedPingQueue(interval: interval, errorHandler: errorHandler, pingHandler: pingHandler)
+            self.detachedPingQueue(interval: interval, errorHandler: errorHandler, pingHandler: pingHandler, token: token)
         }
     }
     
