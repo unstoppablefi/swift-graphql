@@ -45,6 +45,9 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     private var decoder = JSONDecoder()
     private var encoder = JSONEncoder()
     
+    // Every successful ping should be matched by a successful pong
+    private var pingPongMatches: Int = 0
+    
     public init(_ params: S.InitParamaters, autoConnect: Bool = false, pingInterval: TimeInterval? = nil) {
         self.initParams = params
         self.autoConnect = autoConnect
@@ -101,6 +104,14 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                         if let pingInterval = self?.pingInterval {
                             self?.detachedPingQueue(interval: pingInterval, errorHandler: { error in
                                 errorHandler(.pingFailed(error))
+                            }, pingHandler: { [weak self] in
+                                guard let self = self else { return }
+                                self.pingPongMatches += 1
+                                // If we pinged 5 times without a pong, try to restart
+                                if self.pingPongMatches > 5 {
+                                    self.pingPongMatches = 0
+                                    self.restart(errorHandler: errorHandler)
+                                }
                             })
                         }
                     case .ka:
@@ -111,6 +122,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                     case .connection_terminate, .connection_error:
                         self?.restart(errorHandler: errorHandler)
                     case .pong:
+                        self?.pingPongMatches -= 1
                         self?.state = .running
                     case .subscribe, .connection_init, .ping:
                         _ = "The server will never send these messages"
@@ -136,11 +148,14 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     
     private func detachedPingQueue(
         interval: TimeInterval,
-        errorHandler: @escaping (Error) -> Void
+        errorHandler: @escaping (Error) -> Void,
+        pingHandler: @escaping () -> Void
     ) {
         if state == .notRunning {
             // Try again while we're restarting
-            self.detachedPingQueue(interval: interval, errorHandler: errorHandler)
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                self?.detachedPingQueue(interval: interval, errorHandler: errorHandler, pingHandler: pingHandler)
+            }
             return
         }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + interval) { [weak self] in
@@ -151,11 +166,12 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                 let message = Message.ping()
                 let messageData = try self.encoder.encode(message)
                 self.socket?.send(message: messageData, errorHandler: errorHandler)
+                pingHandler()
             } catch let error {
                 errorHandler(error)
             }
             // Schedule the next
-            self.detachedPingQueue(interval: interval, errorHandler: errorHandler)
+            self.detachedPingQueue(interval: interval, errorHandler: errorHandler, pingHandler: pingHandler)
         }
     }
     
