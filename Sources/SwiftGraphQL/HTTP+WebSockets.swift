@@ -35,6 +35,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
         case notRunning, started, running
     }
     
+    private let restartQueue = DispatchQueue(label: "GraphQLSocketRestartQueue")
     private var socket: S?
     private var initParams: S.InitParamaters
     private var autoConnect: Bool
@@ -169,12 +170,12 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
         }
         if state == .notRunning {
             // Try again while we're restarting
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            restartQueue.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                 self?.detachedPingQueue(interval: interval, errorHandler: errorHandler, pingHandler: pingHandler, token: token)
             }
             return
         }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + interval) { [weak self] in
+        restartQueue.asyncAfter(deadline: .now() + interval) { [weak self] in
             guard let self = self else {
                 return
             }
@@ -300,7 +301,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     public func restart(errorHandler: @escaping (SubscribeError) -> Void) {
         self.state = .notRunning
         let params = lastConnectionParams
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3.0) { [weak self] in
+        restartQueue.asyncAfter(deadline: .now() + 3.0) { [weak self] in
             self?.start(connectionParams: params, errorHandler: errorHandler)
         }
     }
