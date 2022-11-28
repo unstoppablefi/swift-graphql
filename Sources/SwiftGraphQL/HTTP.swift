@@ -106,10 +106,11 @@ private func send<Type, TypeLock>(
             return completionHandler(.failure(.network(error)))
         }
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200 ... 299).contains(httpResponse.statusCode)
-        else {
-            return completionHandler(.failure(.badstatus))
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return completionHandler(.failure(.badstatus(nil)))
+        }
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
+            return completionHandler(.failure(.badstatus(httpResponse.statusCode)))
         }
 
         // Try to serialize the response.
@@ -144,7 +145,7 @@ public enum HttpError: Error {
     case timeout
     case network(Error)
     case badpayload
-    case badstatus
+    case badstatus(Int?)
     case cancelled
     case decodingError(Error, extensions: [String: AnyCodable]?)
     case graphQLErrors([GraphQLError], extensions: [String: AnyCodable]?)
@@ -154,10 +155,10 @@ extension HttpError: Equatable {
     public static func == (lhs: SwiftGraphQL.HttpError, rhs: SwiftGraphQL.HttpError) -> Bool {
         // Equals if they are of the same type, different otherwise.
         switch (lhs, rhs) {
+        case (.badstatus(let a), .badstatus(let b)): return a == b
         case (.badURL, badURL),
             (.timeout, .timeout),
             (.badpayload, .badpayload),
-            (.badstatus, .badstatus),
             (.cancelled, .cancelled),
             (.network, .network),
             (.decodingError, .decodingError),
