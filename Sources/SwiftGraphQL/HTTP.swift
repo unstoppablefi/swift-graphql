@@ -217,7 +217,7 @@ private func createGraphQLRequest<Type, TypeLock>(
     #if targetEnvironment(simulator)
     // Write the query
     let time = DispatchTime.now().uptimeNanoseconds
-    let filename = operationName ?? "\(time))"
+    let filename = operationName ?? "\(time)"
     try? payload.query.write(toFile: "/tmp/query_\(filename).graphql", atomically: true, encoding: .utf8)
     // Write the variables
     if let variables = try? encoder.encode(payload.variables) {
