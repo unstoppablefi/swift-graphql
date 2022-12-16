@@ -101,7 +101,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
 //                           log: OSLog.subscription,
 //                           type: .debug, (String(data: data, encoding: .utf8) ?? "Invalid .utf8")
 //                    )
-                    guard let message = try? JSONDecoder().decode(Message.self, from: data) else {
+                    guard var message = try? JSONDecoder().decode(Message.self, from: data) else {
                         os_log("Invalid JSON Payload", log: OSLog.subscription, type: .debug)
                         return false
                     }
@@ -130,6 +130,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                         self?.state = .running
                     case .next, .error, .complete, .data:
                         guard let id = message.id else { return false }
+                        message.originalData = data
                         self?.subscriptions[id]?(message)
                     case .connection_terminate, .connection_error:
                         self?.restart(errorHandler: errorHandler)
@@ -220,6 +221,21 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
             self?.complete(id: id)
         }
         
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        let payload = selection.buildPayload(operationName: operationName)
+
+        // Write the query. We also need the id, so we encode it into the variables
+        try? payload.query.write(toFile: "/tmp/query_\(id).graphql", atomically: true, encoding: .utf8)
+        // Write the variables
+        var copiedVariables = payload.variables
+        copiedVariables["gql-subscription-id"] = AnyCodable(stringLiteral: id)
+        if let variables = try? encoder.encode(copiedVariables) {
+            try? variables.write(to: URL(fileURLWithPath: "/tmp/query_variables_\(id).json"))
+        }
+        #endif
+        #endif
+        
         switch state {
         case .notRunning:
             if autoConnect {
@@ -260,6 +276,17 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                     switch message.type {
                     case .next, .data:
                         do {
+                            if let originalData = message.originalData {
+
+#if DEBUG
+#if targetEnvironment(simulator)
+                                // write the response out. A given subscription can have multiple responses.
+                                let debugTime = DispatchTime.now().uptimeNanoseconds
+                                let url = URL(fileURLWithPath: "/tmp/subscription_response_\(id)_\(debugTime).json")
+                                try? originalData.write(to: url)
+#endif
+#endif
+                            }
                             let result = try GraphQLResult(webSocketMessage: message, with: selection)
                             eventHandler(.success(result))
                         } catch {
@@ -338,6 +365,8 @@ public struct GraphQLSocketMessage: Codable {
         case ping
         case pong
     }
+    
+    public var originalData: Data?
     
     public var type: MessageType
     public var id: String?
