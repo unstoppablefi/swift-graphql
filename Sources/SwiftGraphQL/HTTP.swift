@@ -89,17 +89,39 @@ private func send<Type, TypeLock>(
         return nil
     }
     
+    let debugTime = DispatchTime.now().uptimeNanoseconds
+    
     // Construct a GraphQL request.
     let request = createGraphQLRequest(
         selection: selection,
         operationName: operationName,
         url: url,
         headers: headers,
-        method: method
+        method: method,
+        debugTime: debugTime
     )
     
     // Create a completion handler.
     func onComplete(data: Data?, response: URLResponse?, error: Error?) {
+        
+        // Save the response or the error, depending on what's available
+        #if DEBUG
+        #if targetEnvironment(simulator)
+        let fallback = "\(String(describing: response))".data(using: .utf8) ?? "{'error': 'Could not serialize response'}".data(using: .utf8)!
+        let responeData: Data
+        if let data = data {
+            responeData = data
+        } else if let error = error {
+            responeData = "{'error': '\(error.localizedDescription)'}".data(using: .utf8)
+                ?? fallback
+        } else {
+            responeData = fallback
+        }
+        let url = URL(fileURLWithPath: "/tmp/query_response_\(debugTime).json")
+        try? responeData.write(to: url)
+        #endif
+        #endif
+        
         /* Process the response. */
         // Check for HTTP errors.
         if let error = error {
@@ -197,7 +219,8 @@ private func createGraphQLRequest<Type, TypeLock>(
     operationName: String?,
     url: URL,
     headers: HttpHeaders,
-    method: HttpMethod
+    method: HttpMethod,
+    debugTime: UInt64
 ) -> URLRequest where TypeLock: GraphQLOperation & Decodable {
     // Construct a request.
     var request = URLRequest(url: url)
@@ -216,12 +239,10 @@ private func createGraphQLRequest<Type, TypeLock>(
     #if DEBUG
     #if targetEnvironment(simulator)
     // Write the query
-    let time = DispatchTime.now().uptimeNanoseconds
-    let filename = operationName ?? "\(time)"
-    try? payload.query.write(toFile: "/tmp/query_\(filename).graphql", atomically: true, encoding: .utf8)
+    try? payload.query.write(toFile: "/tmp/query_\(debugTime).graphql", atomically: true, encoding: .utf8)
     // Write the variables
     if let variables = try? encoder.encode(payload.variables) {
-        try? variables.write(to: URL(fileURLWithPath: "/tmp/query_variables_\(filename).json"))
+        try? variables.write(to: URL(fileURLWithPath: "/tmp/query_variables_\(debugTime).json"))
     }
     #endif
     #endif
