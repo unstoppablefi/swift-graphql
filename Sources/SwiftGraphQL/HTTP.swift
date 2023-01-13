@@ -1,5 +1,6 @@
 //import Combine
 import Foundation
+import Gzip
 
 /*
  SwiftGraphQL has no client as it needs no state. Developers
@@ -25,6 +26,7 @@ public func send<Type, TypeLock>(
     headers: HttpHeaders = [:],
     method: HttpMethod = .post,
     session: URLSession = .shared,
+    compressRequest: Bool = false,
     onComplete completionHandler: @escaping (Response<Type, TypeLock>) -> Void
 ) -> URLSessionDataTask? where TypeLock: GraphQLHttpOperation & Decodable {
     send(
@@ -34,6 +36,7 @@ public func send<Type, TypeLock>(
         headers: headers,
         method: method,
         session: session,
+        compressRequest: compressRequest,
         completionHandler: completionHandler
     )
 }
@@ -59,6 +62,7 @@ public func send<Type, TypeLock>(
     headers: HttpHeaders = [:],
     method: HttpMethod = .post,
     session: URLSession = .shared,
+    compressRequest: Bool = false,
     onComplete completionHandler: @escaping (Response<Type, TypeLock>) -> Void
 ) -> URLSessionDataTask? where TypeLock: GraphQLHttpOperation & Decodable {
     send(
@@ -81,6 +85,7 @@ private func send<Type, TypeLock>(
     headers: HttpHeaders,
     method: HttpMethod,
     session: URLSession,
+    compressRequest: Bool = false,
     completionHandler: @escaping (Response<Type, TypeLock>) -> Void
 ) -> URLSessionDataTask? where TypeLock: GraphQLOperation & Decodable {
     // Validate that we got a valid url.
@@ -98,6 +103,7 @@ private func send<Type, TypeLock>(
         url: url,
         headers: headers,
         method: method,
+        compressRequest: compressRequest,
         debugTime: debugTime
     )
     
@@ -220,6 +226,7 @@ private func createGraphQLRequest<Type, TypeLock>(
     url: URL,
     headers: HttpHeaders,
     method: HttpMethod,
+    compressRequest: Bool,
     debugTime: UInt64
 ) -> URLRequest where TypeLock: GraphQLOperation & Decodable {
     // Construct a request.
@@ -246,8 +253,12 @@ private func createGraphQLRequest<Type, TypeLock>(
     }
     #endif
     #endif
-    let encoded = try! encoder.encode(payload)
-    request.httpBody = encoded
+    request.httpBody = try? encoder.encode(payload)
+
+    if compressRequest {
+        request.httpBody = try? request.httpBody?.gzipped()
+        request.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
+    }
 
     return request
 }
