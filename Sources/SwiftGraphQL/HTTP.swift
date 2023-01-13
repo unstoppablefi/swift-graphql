@@ -256,7 +256,7 @@ private func createGraphQLRequest<Type, TypeLock>(
     #endif
     request.httpBody = try? encoder.encode(payload)
 
-    if compressRequest, let gzipped = try? encoder.encode(payload) {
+    if compressRequest, let gzipped = try? request.httpBody?.gzipped() {
         request.httpBody = gzipped
         request.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
     }
