@@ -72,6 +72,7 @@ public func send<Type, TypeLock>(
         headers: headers,
         method: method,
         session: session,
+        compressRequest: compressRequest,
         completionHandler: completionHandler
     )
 }
