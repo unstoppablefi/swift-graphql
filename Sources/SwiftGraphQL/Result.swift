@@ -1,4 +1,6 @@
 import Foundation
+import ZippyJSON
+//import zippyjson
 
 // MARK: - GraphQL Result
 
@@ -11,12 +13,12 @@ public struct GraphQLResult<Type, TypeLock> {
 extension GraphQLResult: Equatable where Type: Equatable, TypeLock: Decodable {}
 
 extension GraphQLResult where TypeLock: Decodable {
-    init(_ response: Data, with selection: Selection<Type, TypeLock?>) throws {
+    public init(_ response: Data, with selection: Selection<Type, TypeLock?>) throws {
         // Decodes the data using provided selection.
         var errors: [GraphQLError]? = nil
         var extensions: [String: AnyCodable]? = nil
         do {
-            let decoder = JSONDecoder()
+            let decoder = ZippyJSONDecoder()
             let response = try decoder.decode(GraphQLResponse.self, from: response)
             errors = response.errors
             extensions = response.extensions

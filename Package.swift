@@ -37,12 +37,16 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "4.0.4"),
         .package(url: "https://github.com/unstoppablefi/GzipSwift", .upToNextMajor(from: "5.0.0")),
+        .package(url: "https://github.com/michaeleisel/ZippyJSON", .upToNextMajor(from: "1.0.0")),
     ],
     targets: [
         /* SwiftGraphQL */
         .target(
             name: "SwiftGraphQL",
-            dependencies: [.product(name: "Gzip", package: "GzipSwift")],
+            dependencies: [
+                .product(name: "Gzip", package: "GzipSwift"),
+                .product(name: "ZippyJSON", package: "ZippyJSON")
+            ],
             path: "Sources/SwiftGraphQL"
         ),
         .target(

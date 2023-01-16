@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import ZippyJSON
 
 import os.log
 
@@ -47,7 +48,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     private var queue: [(GraphQLSocket) -> Void] = []
     private var subscriptions: [String: (GraphQLSocketMessage) -> Void] = [:]
     
-    private var decoder = JSONDecoder()
+    private var decoder = ZippyJSONDecoder()
     private var encoder = JSONEncoder()
     
     // Every successful ping should be matched by a successful pong
@@ -101,7 +102,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
 //                           log: OSLog.subscription,
 //                           type: .debug, (String(data: data, encoding: .utf8) ?? "Invalid .utf8")
 //                    )
-                    guard var message = try? JSONDecoder().decode(Message.self, from: data) else {
+                    guard var message = try? ZippyJSONDecoder().decode(Message.self, from: data) else {
                         os_log("Invalid JSON Payload", log: OSLog.subscription, type: .debug)
                         return false
                     }
