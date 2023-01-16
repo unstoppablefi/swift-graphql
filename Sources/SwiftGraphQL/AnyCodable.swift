@@ -1,4 +1,5 @@
 import Foundation
+import ZippyJSON
 
 
 // Based on: https://github.com/yonaskolb/Codability/blob/master/Sources/Codability/AnyCodable.swift
@@ -123,7 +124,7 @@ extension AnyCodable: Equatable {
     /// Calling this allows you to compare AnyCodables that were initialised with a custom Encodable type.
     mutating func recode() throws {
         let encoded = try JSONEncoder().encode(self)
-        self = try JSONDecoder().decode(AnyCodable.self, from: encoded)
+        self = try ZippyJSONDecoder().decode(AnyCodable.self, from: encoded)
     }
 }
 
