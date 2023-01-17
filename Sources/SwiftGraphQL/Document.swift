@@ -35,11 +35,11 @@ extension Collection where Element == GraphQLField {
 private extension GraphQLField {
     var serialized: [String] {
         switch self {
-        case let .leaf(name, arguments):
-            return ["\(alias!): \(name)\(arguments.serializedForArguments)"]
-        case let .composite(name, arguments, subselection):
+        case let .leaf(name, arguments, alias):
+            return ["\(alias): \(name)\(arguments.serializedForArguments)"]
+        case let .composite(name, arguments, subselection, alias):
             return
-                ["\(alias!): \(name)\(arguments.serializedForArguments) {",
+                ["\(alias): \(name)\(arguments.serializedForArguments) {",
                  "__typename".indent(by: 2)] +
                 subselection.serialized.indent(by: 2) +
                 ["}"]

@@ -1,6 +1,4 @@
 import Foundation
-import ZippyJSON
-//import zippyjson
 
 // MARK: - GraphQL Result
 
@@ -18,7 +16,7 @@ extension GraphQLResult where TypeLock: Decodable {
         var errors: [GraphQLError]? = nil
         var extensions: [String: AnyCodable]? = nil
         do {
-            let decoder = ZippyJSONDecoder()
+            let decoder = JSONDecoder()
             let response = try decoder.decode(GraphQLResponse.self, from: response)
             errors = response.errors
             extensions = response.extensions
