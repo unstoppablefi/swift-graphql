@@ -46,6 +46,7 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     }
     private var queue: [(GraphQLSocket) -> Void] = []
     private var subscriptions: [String: (GraphQLSocketMessage) -> Void] = [:]
+    private let subscriptionsQueue = DispatchQueue(label: "GraphQLSubscriptionsQueue")
     
     private var decoder = JSONDecoder()
     private var encoder = JSONEncoder()
@@ -131,7 +132,9 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                     case .next, .error, .complete, .data:
                         guard let id = message.id else { return false }
                         message.originalData = data
-                        self?.subscriptions[id]?(message)
+                        self?.subscriptionsQueue.schedule {
+                            self?.subscriptions[id]?(message)
+                        }
                     case .connection_terminate, .connection_error:
                         self?.restart(errorHandler: errorHandler)
                         return true
@@ -272,21 +275,20 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                 socket?.send(message: messageData, errorHandler: {
                     eventHandler(.failure(.subscribeFailed($0)))
                 })
-                subscriptions[id] = { message in
+                let handler: (GraphQLSocketMessage) -> Void = { message in
                     switch message.type {
                     case .next, .data:
                         do {
-                            if let originalData = message.originalData {
-
 #if DEBUG
 #if targetEnvironment(simulator)
+                            if let originalData = message.originalData {
                                 // write the response out. A given subscription can have multiple responses.
                                 let debugTime = DispatchTime.now().uptimeNanoseconds
                                 let url = URL(fileURLWithPath: "/tmp/subscription_response_\(id)_\(debugTime).json")
                                 try? originalData.write(to: url)
-#endif
-#endif
                             }
+#endif
+#endif
                             let result = try GraphQLResult(webSocketMessage: message, with: selection)
                             eventHandler(.success(result))
                         } catch {
@@ -309,6 +311,9 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
                         assertionFailure()
                     }
                     
+                }
+                subscriptionsQueue.schedule { [weak self] in
+                    self?.subscriptions[id] = handler
                 }
             } catch {
                 eventHandler(.failure(.failedToEncodeSelection(error)))
@@ -334,7 +339,9 @@ public class GraphQLSocket<S: GraphQLEnabledSocket> {
     }
     
     private func complete(id: String) {
-        subscriptions[id] = nil
+        subscriptionsQueue.schedule { [weak self] in
+            self?.subscriptions[id] = nil
+        }
         let message = Message.complete(id: id)
         let messageData = try! encoder.encode(message)
         socket?.send(message: messageData, errorHandler: { _ in })
